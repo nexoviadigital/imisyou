@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dot Matrix Lyric Video</title>
+<title>merry christmas i miss you</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -30,13 +30,14 @@
 
   .treeCanvas{
     position:absolute;
-    bottom:clamp(8px,3.5vh,26px);
-    width:clamp(90px,22vw,180px);
-    height:clamp(140px,34vw,280px);
+    top:50%;
+    transform:translateY(-50%);
+    width:clamp(70px,17vw,130px);
+    height:clamp(110px,26vw,200px);
     z-index:1;
   }
-  #treeLeftCanvas{ left:clamp(6px,3vw,34px); }
-  #treeRightCanvas{ right:clamp(6px,3vw,34px); }
+  #treeLeftCanvas{ left:clamp(6px,3vw,30px); }
+  #treeRightCanvas{ right:clamp(6px,3vw,30px); }
 
   #titleCenter{
     display:flex;flex-direction:column;align-items:center;gap:8px;
@@ -99,7 +100,7 @@ const CONFIG = {
   asciiTint:  "warm",       // "warm" (warna asli) atau "mono" (putih)
   soundOn:    true,         // true = suara music.mp3 ikut diputar (video.mp4 selalu bisu, tidak dipengaruhi ini)
 
-  // Timeline lirik/adegan. Format tiap baris:
+  // Timeline lirik/adegan. Format tiap baris (detik boleh pakai koma atau titik, mis. 00:40,1 atau 00:40.1):
   //   "MM:SS TEXT teks lirik"   -> tampilkan teks dot-matrix (kata kunci TEXT boleh ditulis atau tidak)
   //   "MM:SS VIDEO"             -> tampilkan video.mp4 sebagai ASCII
   //   "MM:SS PHOTO" / "FOTO"    -> tampilkan foto.jpg sebagai ASCII
@@ -108,21 +109,23 @@ const CONFIG = {
   //   ~kata~  -> pink
   //   ^kata^  -> biru muda
   //   =kata=  -> abu-abu / monokrom
+  //   +kata+  -> hijau
+  //   _kata_  -> kuning
   // Pakai tanda | untuk pindah baris dalam satu lirik, contoh:
   //   00:00 About You|The 1975   -> tampil 2 baris seperti judul
   // PENTING: atur waktunya (MM:SS) sendiri sesuai lagu aslimu — pastikan tiap baris
   // punya waktu yang berbeda/meningkat, jangan disamakan, supaya tiap adegan sempat terlihat.
   timeline: `
-00:01 yeah, i miss you
-00:05 you know it's true
-00:09 so what if i call
-00:14 and you pick up the phone
-00:19 and i use this holiday
-00:22 to make my way to your ghost
-00:28 Oh, what if you're lonely
-00:32 And you know I am too
+00:00,4 +yeah+, ~i miss you~
+00:04,5 you *know* _it's_ true
+00:09 ^so^ _what_ +if+ i *call*
+00:14 *and* you *pick* up *the* phone
+00:18,5 and +i+ use +this+ holiday
+00:21,5 _to_ make _my_ way _to_ your _ghost_
+00:27,5 Oh, ^what^ if ^you're^ lonely
+00:32 ~And~ you ~know~ I ~am~ too
 00:37 And I get the chance to say
-00:40 Merry Christmas, I miss you
+00:40 *M*^e^+r+_r_y +C+_h_^r^*i*s+t+_m_~a~s, I miss you
 00:46 ~I miss you~
   `
 };
@@ -194,7 +197,9 @@ const HIGHLIGHT_COLORS = {
   '*': '#ff3b3f', // merah
   '~': '#ff6fae', // pink
   '^': '#7ec8ff', // biru muda
-  '=': '#b9b9c2'  // abu-abu / monokrom
+  '=': '#b9b9c2', // abu-abu / monokrom
+  '+': '#3ddc84', // hijau
+  '_': '#ffd93d'  // kuning
 };
 // karakter pengisi huruf
 const GLYPH_RAMP = "bima";
@@ -586,9 +591,11 @@ function parseTimeline(raw){
   const lines = raw.split('\n').map(s=>s.trim()).filter(Boolean);
   const events = [];
   for(const ln of lines){
-    const m = ln.match(/^(\d{1,3}):(\d{2}(?:\.\d+)?)\s+(.*)$/);
+    // detik boleh pakai koma ATAU titik sebagai desimal, contoh: 00:40,1 atau 00:40.1
+    const m = ln.match(/^(\d{1,3}):(\d{2}(?:[.,]\d+)?)\s+(.*)$/);
     if(!m) continue;
-    const t = parseInt(m[1],10)*60 + parseFloat(m[2]);
+    const secStr = m[2].replace(',', '.');
+    const t = parseInt(m[1],10)*60 + parseFloat(secStr);
     const rest = m[3].trim();
     const kw = rest.match(/^(TEXT|VIDEO|PHOTO|FOTO)\b\s*(.*)$/i);
     let type = 'TEXT', text = rest;
