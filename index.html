@@ -10,12 +10,9 @@
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;background:#050506;color:#e8e8ea;font-family:'Space Mono',monospace;overflow:hidden;}
   #stage{position:relative;width:100vw;height:100vh;height:100dvh;background:#050506;overflow:hidden;}
-  #dotCanvas,#asciiCanvas{position:absolute;top:0;left:0;width:100%;height:100%;}
+  #snowCanvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none;}
+  #dotCanvas,#asciiCanvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;}
   #asciiCanvas{display:none;}
-
-  #clockLabel{position:absolute;top:max(14px,env(safe-area-inset-top));right:16px;font-size:11px;letter-spacing:.1em;color:#83838d;
-    z-index:5;font-family:'JetBrains Mono',monospace;opacity:0;transition:opacity .4s;}
-  #clockLabel.show{opacity:1;}
 
   #missingNotice{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
     font-size:clamp(11px,3vw,13px);color:#ffb545;text-align:center;line-height:1.6;z-index:4;display:none;max-width:85%;}
@@ -24,13 +21,28 @@
     position:absolute;inset:0;z-index:20;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     background:#050506;gap:clamp(18px,5vw,34px);
-    padding:0 5vw;
+    padding:0 4vw;
     cursor:pointer;
     -webkit-tap-highlight-color:transparent;
     transition:opacity .6s ease, visibility .6s;
   }
   #titleScreen.hidden{opacity:0;visibility:hidden;pointer-events:none;}
-  #titleDotCanvas{width:100%;height:clamp(120px,34vw,260px);}
+
+  .treeCanvas{
+    position:absolute;
+    bottom:clamp(8px,3.5vh,26px);
+    width:clamp(90px,22vw,180px);
+    height:clamp(140px,34vw,280px);
+    z-index:1;
+  }
+  #treeLeftCanvas{ left:clamp(6px,3vw,34px); }
+  #treeRightCanvas{ right:clamp(6px,3vw,34px); }
+
+  #titleCenter{
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    width:100%;
+  }
+  #titleDotCanvas{width:100%;height:clamp(120px,30vw,240px);}
   #titleArtist{font-size:clamp(10px,2.6vw,13px);letter-spacing:.25em;text-transform:uppercase;color:#83838d;text-align:center;}
   #tapHint{
     font-size:clamp(10px,2.6vw,12px);letter-spacing:.2em;text-transform:uppercase;color:#5c5c66;
@@ -42,15 +54,12 @@
     50%{opacity:1;}
   }
 
-  @media (max-width: 480px){
-    #titleScreen{gap:16px;}
-  }
 </style>
 </head>
 <body>
 
 <div id="stage">
-  <div id="clockLabel">00:00</div>
+  <canvas id="snowCanvas"></canvas>
   <canvas id="dotCanvas"></canvas>
   <canvas id="asciiCanvas"></canvas>
   <div id="missingNotice"></div>
@@ -60,9 +69,13 @@
   <audio id="masterMusic" src="music.mp3" preload="auto" style="display:none;"></audio>
 
   <div id="titleScreen">
-    <canvas id="titleDotCanvas"></canvas>
-    <div id="titleArtist"></div>
-    <div id="tapHint"></div>
+    <canvas id="treeLeftCanvas" class="treeCanvas"></canvas>
+    <canvas id="treeRightCanvas" class="treeCanvas"></canvas>
+    <div id="titleCenter">
+      <canvas id="titleDotCanvas"></canvas>
+      <div id="titleArtist"></div>
+    </div>
+    <div id="tapHint">ketuk layar untuk mulai</div>
   </div>
 </div>
 
@@ -74,10 +87,10 @@
    KONFIGURASI — edit semua di sini, tidak ada panel setting di tampilan.
    ========================================================================= */
 const CONFIG = {
-  songTitle:  "Merry Christmas\n I Miss You",  // pakai \n untuk pindah baris di judul (boleh 1 atau 2 baris)
+  songTitle:  "Merry Christmas\nI Miss You",  // pakai \n untuk pindah baris di judul (boleh 1 atau 2 baris)
   songArtist: "Alex Crichton",
 
-  imagePath:  "",   // taruh file ini sejajar dengan file HTML ini
+  imagePath:  "",   // taruh file ini sejajar dengan file HTML ini (kosongkan kalau tidak dipakai)
   videoPath:  "",   // taruh file ini sejajar dengan file HTML ini (videonya SELALU bisu, tanpa suara)
   musicPath:  "m.mp3", // audio lagu/musik lirik yang benar-benar terdengar (ganti nama sesuai file audiomu)
 
@@ -105,7 +118,7 @@ const CONFIG = {
 00:09 so what if i call
 00:14 and you pick up the phone
 00:19 and i use this holiday
-00:21 to make my way to your ghost
+00:22 to make my way to your ghost
 00:28 Oh, what if you're lonely
 00:32 And you know I am too
 00:37 And I get the chance to say
@@ -116,18 +129,21 @@ const CONFIG = {
 /* ========================================================================= */
 
 const stage = document.getElementById('stage');
+const snowCanvas = document.getElementById('snowCanvas');
+const sctx = snowCanvas.getContext('2d');
 const dotCanvas = document.getElementById('dotCanvas');
 const asciiCanvas = document.getElementById('asciiCanvas');
 const dctx = dotCanvas.getContext('2d');
 const actx = asciiCanvas.getContext('2d');
 const missingNotice = document.getElementById('missingNotice');
-const clockLabel = document.getElementById('clockLabel');
 const masterVideo = document.getElementById('masterVideo');
 const masterPhoto = document.getElementById('masterPhoto');
 const masterMusic = document.getElementById('masterMusic');
 const titleScreen = document.getElementById('titleScreen');
 const titleDotCanvas = document.getElementById('titleDotCanvas');
 const tctx = titleDotCanvas.getContext('2d');
+const treeLeftCanvas = document.getElementById('treeLeftCanvas');
+const treeRightCanvas = document.getElementById('treeRightCanvas');
 
 masterVideo.src = CONFIG.videoPath;
 masterPhoto.src = CONFIG.imagePath;
@@ -136,7 +152,7 @@ document.getElementById('titleArtist').textContent = CONFIG.songArtist;
 
 function resizeCanvasesOnly(){
   const dpr = Math.min(window.devicePixelRatio||1, 2);
-  [dotCanvas, asciiCanvas].forEach(c=>{
+  [snowCanvas, dotCanvas, asciiCanvas].forEach(c=>{
     const w = stage.clientWidth, h = stage.clientHeight;
     c.width = w*dpr; c.height = h*dpr;
     c.getContext('2d').setTransform(dpr,0,0,dpr,0,0);
@@ -148,6 +164,7 @@ function resizeCanvasesOnly(){
 
 function resizeAll(){
   resizeCanvasesOnly();
+  if(typeof initSnow === 'function') initSnow();
   // layar berubah ukuran (mis. putar HP) -> susun ulang teks yang sedang tampil
   // supaya tetap pas dan tidak kepotong.
   if(!titleScreen.classList.contains('hidden')){
@@ -179,12 +196,11 @@ const HIGHLIGHT_COLORS = {
   '^': '#7ec8ff', // biru muda
   '=': '#b9b9c2'  // abu-abu / monokrom
 };
-// karakter pengisi huruf -- sesuai permintaan: v b + - i m a
+// karakter pengisi huruf
 const GLYPH_RAMP = "bima";
 
 // Font dot-matrix 5x7 buatan sendiri (seperti papan LED klasik) supaya bentuk tiap
 // huruf DIJAMIN benar & terbaca -- bukan hasil tebak-tebakan dari font sistem.
-// '1' = kotak terisi (nanti diisi salah satu huruf v a b m i + -), '0' = kosong.
 const FONT5X7 = {
 ' ':["00000","00000","00000","00000","00000","00000","00000"],
 'A':["01110","10001","10001","11111","10001","10001","10001"],
@@ -245,7 +261,7 @@ function parseHighlights(raw){
       } else if(!active){
         active = {marker:c, start:clean.length};
       } else {
-        clean += c; // simbol beda sedang aktif, tulis apa adanya
+        clean += c;
       }
       continue;
     }
@@ -258,8 +274,6 @@ function colorAt(idx, ranges){
   return null;
 }
 
-// Susun tiap baris dari pola 5x7 di atas -> hasilnya SELALU membentuk kata yang benar,
-// lalu tiap kotak "1" diisi salah satu huruf v a b m i + - untuk teksturnya.
 function buildDotField(rawLine, fontSizePx){
   fontSizePx = fontSizePx || 90;
   const rawLines = String(rawLine).split('\n');
@@ -311,9 +325,6 @@ function buildDotField(rawLine, fontSizePx){
   return {dots, w:maxLineW, h:totalH, spacing:CELL};
 }
 
-// Pilih ukuran font agar teks pas dengan lebar & tinggi layar (penting untuk HP,
-// dan untuk teks 2 baris supaya tidak kepotong atas/bawah). Diusahakan tetap sebesar
-// mungkin (ukuran "sedang", tidak kekecilan) selama masih muat di layar.
 function fitField(rawLine, desiredFontSize, canvasEl){
   const maxW = Math.max(60, canvasEl.clientWidth * 0.96);
   const maxH = Math.max(40, canvasEl.clientHeight * 0.96);
@@ -326,8 +337,6 @@ function fitField(rawLine, desiredFontSize, canvasEl){
   return field;
 }
 
-// Tiap kotak "1" pada pola huruf diisi 1 karakter (v a b m i + -), pas mengisi kotaknya,
-// nempel rapat ke tetangganya -- bentuk hurufnya dijamin benar karena polanya sudah pasti (bitmap font).
 function drawDotField(ctx, canvasEl, field, animStart){
   const W = canvasEl.clientWidth, H = canvasEl.clientHeight;
   ctx.clearRect(0,0,W,H);
@@ -338,7 +347,6 @@ function drawDotField(ctx, canvasEl, field, animStart){
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   field.dots.forEach((d)=>{
-    // kedip cepat & serentak (bukan muncul bertahap dari kiri ke kanan)
     const t = Math.max(0, Math.min(1, elapsed/90));
     if(t<=0) return;
     ctx.globalAlpha = t;
@@ -359,18 +367,19 @@ function loopDot(){
   if(performance.now()-dotAnimStart < 150){
     dotRAF = requestAnimationFrame(loopDot);
   } else {
-    dotRAF = null; // sudah selesai muncul semua -> berhenti, hemat baterai/performa
+    dotRAF = null;
   }
 }
 
 function showTextScene(rawLine){
   lastRawLine = rawLine;
-  const multiline = rawLine.replace(/\|/g, '\n'); // "|" = tanda pindah baris manual
+  const multiline = rawLine.replace(/\|/g, '\n');
   currentDots = fitField(multiline, CONFIG.fontSize, dotCanvas);
   dotAnimStart = performance.now();
   dotCanvas.style.display='block';
   asciiCanvas.style.display='none';
   missingNotice.style.display='none';
+  if(asciiRAF){ cancelAnimationFrame(asciiRAF); asciiRAF=null; }
   if(dotRAF) cancelAnimationFrame(dotRAF);
   loopDot();
 }
@@ -387,10 +396,93 @@ function loopTitle(){
   }
 }
 function renderTitle(){
-  titleDots = fitField(CONFIG.songTitle, 76, titleDotCanvas, {family:"'Space Mono', monospace", weight:700});
+  titleDots = fitField(CONFIG.songTitle, 76, titleDotCanvas);
   titleAnimStart = performance.now();
   if(titleRAF) cancelAnimationFrame(titleRAF);
   loopTitle();
+  renderTree(treeLeftCanvas);
+  renderTree(treeRightCanvas);
+}
+
+/* ============ POHON NATAL (dibuat dari huruf pengisi yang sama seperti lirik) ============ */
+// pola pohon 9 kolom x 9 baris: 7 baris badan pohon (segitiga bertingkat) + 2 baris batang
+const TREE_PATTERN = [
+  "    1    ",
+  "   111   ",
+  "  11111  ",
+  " 1111111 ",
+  "  11111  ",
+  " 1111111 ",
+  "111111111",
+  "   111   ",
+  "   111   "
+];
+function renderTree(canvasEl){
+  if(!canvasEl) return;
+  const ctx = canvasEl.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  const w = canvasEl.clientWidth, h = canvasEl.clientHeight;
+  if(w<=0 || h<=0) return;
+  canvasEl.width = w*dpr; canvasEl.height = h*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+
+  const cols = TREE_PATTERN[0].length, rows = TREE_PATTERN.length;
+  const CELL = Math.min(w/cols, h/rows);
+  const offX = (w - CELL*cols)/2, offY = (h - CELL*rows)/2;
+  ctx.font = `700 ${Math.max(7, CELL*1.3)}px 'JetBrains Mono', monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  let gi = 0;
+  TREE_PATTERN.forEach((row, r)=>{
+    const isTrunk = r >= rows-2;
+    const isStar = r===0;
+    for(let c=0;c<row.length;c++){
+      if(row[c] !== '1') continue;
+      ctx.fillStyle = isStar ? '#ffd93d' : (isTrunk ? '#a9713f' : '#3ddc84');
+      const ch = GLYPH_RAMP[gi++ % GLYPH_RAMP.length];
+      ctx.fillText(ch, offX + c*CELL + CELL/2, offY + r*CELL + CELL/2);
+    }
+  });
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+}
+
+/* ============ SALJU (kristal jatuh di belakang lirik) ============ */
+let snowflakes = [];
+function initSnow(){
+  const W = stage.clientWidth, H = stage.clientHeight;
+  if(W<=0 || H<=0) return;
+  const count = Math.max(26, Math.min(120, Math.round((W*H)/16000)));
+  snowflakes = Array.from({length: count}, ()=>({
+    x: Math.random()*W,
+    y: Math.random()*H,
+    size: 8 + Math.random()*14,
+    speed: 0.25 + Math.random()*0.6,
+    drift: (Math.random()-0.5)*0.8,
+    phase: Math.random()*Math.PI*2,
+    alpha: 0.25 + Math.random()*0.55
+  }));
+}
+function snowLoop(){
+  const W = stage.clientWidth, H = stage.clientHeight;
+  sctx.clearRect(0,0,W,H);
+  sctx.textAlign='center'; sctx.textBaseline='middle';
+  snowflakes.forEach(f=>{
+    f.y += f.speed;
+    f.phase += 0.015;
+    f.x += Math.sin(f.phase)*f.drift;
+    if(f.y > H+16){ f.y = -16; f.x = Math.random()*W; }
+    if(f.x < -16) f.x = W+16;
+    if(f.x > W+16) f.x = -16;
+    sctx.globalAlpha = f.alpha;
+    sctx.fillStyle = '#eaf3ff';
+    sctx.font = `${f.size}px 'JetBrains Mono', monospace`;
+    sctx.fillText('*', f.x, f.y);
+  });
+  sctx.globalAlpha = 1;
+  requestAnimationFrame(snowLoop);
 }
 
 /* ============ ASCII IMAGE / VIDEO ENGINE ============ */
@@ -399,7 +491,6 @@ const hiddenCanvas = document.createElement('canvas');
 const hctx = hiddenCanvas.getContext('2d', {willReadFrequently:true});
 let asciiRAF = null;
 let asciiSourceEl = null;
-let scanRow = 0;
 
 function effectiveAsciiCols(){
   const w = window.innerWidth;
@@ -408,19 +499,20 @@ function effectiveAsciiCols(){
   return CONFIG.asciiCols;
 }
 
-function drawAsciiFrame(){
-  if(!asciiSourceEl){ asciiRAF = requestAnimationFrame(drawAsciiFrame); return; }
+function renderAsciiOnce(){
+  const W = asciiCanvas.clientWidth, H = asciiCanvas.clientHeight;
+  actx.clearRect(0,0,W,H);
+  if(!asciiSourceEl) return;
   const cols = effectiveAsciiCols();
   const srcW = asciiSourceEl.videoWidth || asciiSourceEl.naturalWidth || 0;
   const srcH = asciiSourceEl.videoHeight || asciiSourceEl.naturalHeight || 0;
-  if(!srcW || !srcH){ asciiRAF = requestAnimationFrame(drawAsciiFrame); return; }
+  if(!srcW || !srcH) return;
 
   const rows = Math.max(10, Math.round((srcH/srcW)*cols*0.55));
   hiddenCanvas.width = cols; hiddenCanvas.height = rows;
   hctx.drawImage(asciiSourceEl, 0, 0, cols, rows);
   const data = hctx.getImageData(0,0,cols,rows).data;
 
-  // luminance & warna dipakai apa adanya dari frame foto/video (tidak direkayasa kontrasnya)
   const lums = new Float32Array(cols*rows);
   for(let y=0;y<rows;y++){
     for(let x=0;x<cols;x++){
@@ -428,29 +520,28 @@ function drawAsciiFrame(){
       lums[y*cols+x] = 0.299*data[idx]+0.587*data[idx+1]+0.114*data[idx+2];
     }
   }
-  const W = asciiCanvas.clientWidth, H = asciiCanvas.clientHeight;
-  actx.clearRect(0,0,W,H);
   const cellW = W/cols, cellH = H/rows;
-  const fontPx = Math.max(7, Math.min(cellW*2.05, cellH*1.5)); // karakter dibesarkan sedikit biar rapat & lebih jelas, tidak banyak celah
+  const fontPx = Math.max(7, Math.min(cellW*2.05, cellH*1.5));
   actx.font = `${fontPx}px 'JetBrains Mono', monospace`;
   actx.textBaseline='top';
 
-  // langsung tampil penuh, tanpa animasi scan bertahap
   for(let y=0;y<rows;y++){
     for(let x=0;x<cols;x++){
       const idx=(y*cols+x)*4;
       const rC=data[idx], gC=data[idx+1], bC=data[idx+2];
-      const lum = Math.min(1, Math.max(0, lums[y*cols+x]/255)); // apa adanya, tidak direkayasa kontrasnya
+      const lum = Math.min(1, Math.max(0, lums[y*cols+x]/255));
       const ch = RAMP[Math.floor(lum*(RAMP.length-1))];
       if(ch===' ') continue;
-      // "warm" = warna asli dari foto/video (bukan direkayasa), "mono" = abu-abu/putih polos
       actx.fillStyle = CONFIG.asciiTint==='warm' ? `rgb(${rC},${gC},${bC})` : (()=>{const g=Math.round(lum*255);return `rgb(${g},${g},${g})`;})();
       actx.globalAlpha = 0.7 + lum*0.3;
       actx.fillText(ch, x*cellW, y*cellH);
     }
   }
   actx.globalAlpha = 1;
-  asciiRAF = requestAnimationFrame(drawAsciiFrame);
+}
+function asciiLoop(){
+  renderAsciiOnce();
+  asciiRAF = requestAnimationFrame(asciiLoop);
 }
 
 function showVideoScene(){
@@ -458,40 +549,39 @@ function showVideoScene(){
   if(!videoAvailable){
     asciiCanvas.style.display='none';
     missingNotice.style.display='block';
-    missingNotice.textContent = CONFIG.videoPath + ' tidak ditemukan di folder ini.';
+    missingNotice.textContent = (CONFIG.videoPath || 'video.mp4') + ' tidak ditemukan di folder ini.';
     return;
   }
   missingNotice.style.display='none';
-  asciiCanvas.style.display='block';
+  asciiSourceEl = null;
+  actx.clearRect(0,0,asciiCanvas.clientWidth, asciiCanvas.clientHeight);
   asciiSourceEl = masterVideo;
-  scanRow = 0;
-  // Pastikan videonya BENERAN jalan tiap kali adegan ini muncul (jangan cuma andalkan
-  // video yang sudah main dari awal timeline -- kalau videonya pendek, dia bisa sudah
-  // habis & berhenti sebelum adegan VIDEO ini ditampilkan).
   if(masterVideo.paused || masterVideo.ended){
     masterVideo.currentTime = 0;
     masterVideo.play().catch(()=>{});
   }
-  if(!asciiRAF) drawAsciiFrame();
+  renderAsciiOnce();
+  asciiCanvas.style.display='block';
+  if(!asciiRAF) asciiLoop();
 }
 function showPhotoScene(){
   dotCanvas.style.display='none';
   if(!photoAvailable){
     asciiCanvas.style.display='none';
     missingNotice.style.display='block';
-    missingNotice.textContent = CONFIG.imagePath + ' tidak ditemukan di folder ini.';
+    missingNotice.textContent = (CONFIG.imagePath || 'foto.jpg') + ' tidak ditemukan di folder ini.';
     return;
   }
   missingNotice.style.display='none';
-  asciiCanvas.style.display='block';
+  asciiSourceEl = null;
+  actx.clearRect(0,0,asciiCanvas.clientWidth, asciiCanvas.clientHeight);
   asciiSourceEl = masterPhoto;
-  scanRow = 0;
-  if(!asciiRAF) drawAsciiFrame();
+  renderAsciiOnce();
+  asciiCanvas.style.display='block';
+  if(!asciiRAF) asciiLoop();
 }
 
 /* ============ TIMELINE PARSER ============ */
-// Toleran: kata kunci TEXT/VIDEO/PHOTO (atau alias FOTO) boleh ditulis atau tidak.
-// Kalau tidak ada kata kunci di awal, baris otomatis dianggap TEXT dengan isi apa adanya.
 function parseTimeline(raw){
   const lines = raw.split('\n').map(s=>s.trim()).filter(Boolean);
   const events = [];
@@ -510,8 +600,6 @@ function parseTimeline(raw){
     events.push({t, type, text});
   }
   events.sort((a,b)=>a.t-b.t);
-  // kalau ada beberapa baris di detik yang sama persis, geser sedikit
-  // supaya tidak langsung saling menimpa (video/foto sempat kelihatan).
   for(let i=1;i<events.length;i++){
     if(events[i].t <= events[i-1].t){
       events[i].t = events[i-1].t + 0.05;
@@ -532,10 +620,6 @@ let playing = false;
 let internalStart = 0;
 let internalRAF = null;
 
-function fmtClock(t){
-  const m=Math.floor(t/60), s=Math.floor(t%60);
-  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
-}
 function applyEvent(ev){
   if(!ev) return;
   if(ev.type==='TEXT') showTextScene(ev.text);
@@ -544,22 +628,18 @@ function applyEvent(ev){
 }
 function tickClock(){
   if(!playing) return;
-  // Jam utama = music.mp3 (kalau ada), atau jam internal kalau tidak ada audio.
   let now = (musicAvailable && !masterMusic.paused) ? masterMusic.currentTime : (performance.now()-internalStart)/1000;
-  clockLabel.textContent = fmtClock(now);
   const idx = activeEventIndex(timelineEvents, now);
   if(idx !== lastEventIdx && idx>=0){ lastEventIdx = idx; applyEvent(timelineEvents[idx]); }
   const lastT = timelineEvents.length ? timelineEvents[timelineEvents.length-1].t + 4 : 0;
   if(now >= lastT && lastT>0){ finishPlayback(); return; }
   internalRAF = requestAnimationFrame(tickClock);
 }
-// Selesai sekali jalan -> berhenti (TIDAK diulang otomatis), lalu balik ke layar judul.
 function finishPlayback(){
   playing = false;
   if(internalRAF) cancelAnimationFrame(internalRAF);
   if(videoAvailable) masterVideo.pause();
   if(musicAvailable) masterMusic.pause();
-  clockLabel.classList.remove('show');
   setTimeout(()=>{
     dotCanvas.style.display='none';
     asciiCanvas.style.display='none';
@@ -571,13 +651,9 @@ function finishPlayback(){
 function startPlayback(){
   if(timelineEvents.length===0){ alert('Timeline kosong atau formatnya salah di CONFIG.timeline.'); return; }
   playing = true;
-  clockLabel.classList.add('show');
-  // video.mp4 SELALU bisu (bukan sumber suara). Tidak diputar dari sekarang -- baru
-  // benar-benar mulai jalan saat adegan VIDEO di timeline muncul (lihat showVideoScene).
   masterVideo.currentTime = 0;
   masterVideo.muted = true;
   masterVideo.pause();
-  // music.mp3 = satu-satunya sumber suara, dan jadi acuan waktu utama kalau tersedia
   masterMusic.currentTime = 0;
   masterMusic.muted = !CONFIG.soundOn;
   if(musicAvailable) masterMusic.play().catch(()=>{});
@@ -593,7 +669,11 @@ titleScreen.addEventListener('click', ()=>{
 });
 
 /* ============ INIT ============ */
-window.addEventListener('load', ()=>{ setTimeout(renderTitle, 250); });
+window.addEventListener('load', ()=>{
+  initSnow();
+  requestAnimationFrame(snowLoop);
+  setTimeout(renderTitle, 250);
+});
 
 })();
 </script>
