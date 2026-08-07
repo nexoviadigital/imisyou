@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>merry christmas i miss you</title>
+<title> merry christmas i miss you</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -30,7 +30,7 @@
 
   .treeCanvas{
     position:absolute;
-    top:50%;
+    top:64%;
     transform:translateY(-50%);
     width:clamp(70px,17vw,130px);
     height:clamp(110px,26vw,200px);
@@ -168,8 +168,6 @@ function resizeCanvasesOnly(){
 function resizeAll(){
   resizeCanvasesOnly();
   if(typeof initSnow === 'function') initSnow();
-  // layar berubah ukuran (mis. putar HP) -> susun ulang teks yang sedang tampil
-  // supaya tetap pas dan tidak kepotong.
   if(!titleScreen.classList.contains('hidden')){
     if(typeof renderTitle === 'function') renderTitle();
   } else if(dotCanvas.style.display==='block' && lastRawLine){
@@ -181,7 +179,7 @@ window.addEventListener('resize', ()=>{
   clearTimeout(resizeDebounce);
   resizeDebounce = setTimeout(resizeAll, 120);
 });
-resizeCanvasesOnly(); // ukuran awal saja (aman dipanggil sebelum konstanta di bawah didefinisikan)
+resizeCanvasesOnly();
 
 /* ============ ASSET AVAILABILITY ============ */
 let videoAvailable = false, photoAvailable = false, musicAvailable = false;
@@ -204,8 +202,6 @@ const HIGHLIGHT_COLORS = {
 // karakter pengisi huruf
 const GLYPH_RAMP = "bima";
 
-// Font dot-matrix 5x7 buatan sendiri (seperti papan LED klasik) supaya bentuk tiap
-// huruf DIJAMIN benar & terbaca -- bukan hasil tebak-tebakan dari font sistem.
 const FONT5X7 = {
 ' ':["00000","00000","00000","00000","00000","00000","00000"],
 'A':["01110","10001","10001","11111","10001","10001","10001"],
@@ -255,7 +251,7 @@ const FONT5X7 = {
 function glyphFor(ch){ return FONT5X7[ch.toUpperCase()] || FONT5X7[' ']; }
 
 function parseHighlights(raw){
-  let clean='', ranges=[]; // ranges: [start, end, color]
+  let clean='', ranges=[];
   let active = null;
   for(let i=0;i<raw.length;i++){
     const c = raw[i];
@@ -410,7 +406,6 @@ function renderTitle(){
 }
 
 /* ============ POHON NATAL (dibuat dari huruf pengisi yang sama seperti lirik) ============ */
-// pola pohon 9 kolom x 9 baris: 7 baris badan pohon (segitiga bertingkat) + 2 baris batang
 const TREE_PATTERN = [
   "    1    ",
   "   111   ",
@@ -591,8 +586,8 @@ function parseTimeline(raw){
   const lines = raw.split('\n').map(s=>s.trim()).filter(Boolean);
   const events = [];
   for(const ln of lines){
-    // detik boleh pakai koma ATAU titik sebagai desimal, contoh: 00:40,1 atau 00:40.1
-    const m = ln.match(/^(\d{1,3}):(\d{2}(?:[.,]\d+)?)\s+(.*)$/);
+    // detik boleh pakai koma ATAU titik sebagai desimal, dan 1 atau 2 angka
+    const m = ln.match(/^(\d{1,3}):(\d{1,2}(?:[.,]\d+)?)\s+(.*)$/);
     if(!m) continue;
     const secStr = m[2].replace(',', '.');
     const t = parseInt(m[1],10)*60 + parseFloat(secStr);
